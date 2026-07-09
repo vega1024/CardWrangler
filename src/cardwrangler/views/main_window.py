@@ -19,6 +19,7 @@ from ..viewmodels.content_view_model import ContentViewModel
 from .detail_view import DetailView
 from .settings_view import SettingsView
 from .sidebar_view import SidebarView
+from .compare_view import CompareDialog
 from .workers import OffloadWorker
 
 
@@ -53,6 +54,13 @@ class MainWindow(QMainWindow):
 
         settings_action = toolbar.addAction("设置")
         settings_action.triggered.connect(self._open_settings)
+
+        spacer2 = QWidget()
+        spacer2.setFixedWidth(12)
+        toolbar.addWidget(spacer2)
+
+        compare_action = toolbar.addAction("比对路径")
+        compare_action.triggered.connect(self._open_compare)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         self.sidebar = SidebarView()
@@ -152,3 +160,7 @@ class MainWindow(QMainWindow):
             self.settings.setValue("verify_after_copy", v["verify_after_copy"])
             self.settings.setValue("checksum_algorithm", v["checksum_algorithm"])
             self.settings.setValue("default_dest", v["default_dest"])
+
+    def _open_compare(self) -> None:
+        dlg = CompareDialog(self)
+        dlg.exec()
