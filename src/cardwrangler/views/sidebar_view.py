@@ -4,7 +4,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt, QSize, Signal
 from PySide6.QtWidgets import QPushButton, QListWidget, QListWidgetItem, QVBoxLayout, QWidget
 
-from ...models.card_job import CardJob
+from ..models.card_job import CardJob
 from .components.card_row import make_card_row
 
 

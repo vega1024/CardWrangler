@@ -6,9 +6,9 @@ from __future__ import annotations
 
 from PySide6.QtCore import QThread, Signal
 
-from ...models.card_job import CardJob
-from ...models.item import Item
-from ...services.offload_service import offload_item
+from ..models.card_job import CardJob
+from ..models.item import Item
+from ..services.offload_service import offload_item
 
 
 class OffloadWorker(QThread):

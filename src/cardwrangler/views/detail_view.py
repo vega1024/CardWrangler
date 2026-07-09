@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import QLabel, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget
 
-from ...models.card_job import CardJob
-from ...models.item import Item
+from ..models.card_job import CardJob
+from ..models.item import Item
 
 
 class DetailView(QWidget):
