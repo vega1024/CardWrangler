@@ -18,7 +18,7 @@ def test_add_job_emits_jobs_changed_and_persists(tmp_path):
     events, slot = _spy()
     vm.jobs_changed.connect(slot)
 
-    job = CardJob.new("CardA", "/src", "/dst")
+    job = CardJob.new("CardA", "/src", ["/dst"])
     vm.add_job(job)
 
     assert len(vm.jobs) == 1
@@ -30,7 +30,7 @@ def test_add_job_emits_jobs_changed_and_persists(tmp_path):
 def test_select_and_remove_job(tmp_path):
     repo = JobRepository(tmp_path / "jobs.json")
     vm = ContentViewModel(repo)
-    job = CardJob.new("CardA", "/src", "/dst")
+    job = CardJob.new("CardA", "/src", ["/dst"])
     vm.add_job(job)
 
     vm.select_job(job)

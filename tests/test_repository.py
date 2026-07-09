@@ -7,13 +7,14 @@ from cardwrangler.persistence.repository import JobRepository
 
 
 def _make_job() -> CardJob:
-    job = CardJob.new("TestCard", "/src", "/dst")
+    job = CardJob.new("TestCard", "/src", ["/dst"])
     job.items = [
         Item(id=f"{job.id}:0", name="a.mxf", source_path="/src/a.mxf", size=10),
         Item(id=f"{job.id}:1", name="b.mxf", source_path="/src/b.mxf", size=20),
     ]
     job.items[0].status = ItemStatus.VERIFIED
-    job.items[0].checksum_source = job.items[0].checksum_dest = "deadbeef"
+    job.items[0].checksum_source = "deadbeef"
+    job.items[0].checksums_dest = ["deadbeef"]
     return job
 
 

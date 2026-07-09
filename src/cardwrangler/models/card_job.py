@@ -1,4 +1,4 @@
-"""一次「转卡任务」（一张存储卡 → 一块硬盘）的数据模型。"""
+"""一次「转卡任务」（一张存储卡 → 一个或多个目标硬盘）的数据模型。"""
 from __future__ import annotations
 
 import uuid
@@ -11,12 +11,12 @@ from .item import Item, ItemStatus
 
 @dataclass
 class CardJob:
-    """一条转卡任务：包含若干 Item（文件）以及整体配置。"""
+    """一条转卡任务：包含若干 Item（文件）以及整体配置（可含多个目标目录）。"""
 
     id: str
     label: str
     source_root: str
-    dest_root: str
+    dest_roots: List[str] = field(default_factory=list)   # 一源多目标
     items: List[Item] = field(default_factory=list)
     created_at: str = field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
     verify_after_copy: bool = True
@@ -40,7 +40,7 @@ class CardJob:
             "id": self.id,
             "label": self.label,
             "source_root": self.source_root,
-            "dest_root": self.dest_root,
+            "dest_roots": self.dest_roots,
             "items": [i.to_dict() for i in self.items],
             "created_at": self.created_at,
             "verify_after_copy": self.verify_after_copy,
@@ -53,11 +53,16 @@ class CardJob:
         d = dict(d)
         d["status"] = ItemStatus(d.get("status", "pending"))
         d["items"] = [Item.from_dict(i) for i in d.get("items", [])]
+        # 兼容旧版单目标 JSON（dest_root: str）
+        dest = d.get("dest_roots")
+        if not dest:
+            single = d.get("dest_root")
+            dest = [single] if single else []
         return cls(
             id=d["id"],
             label=d["label"],
             source_root=d["source_root"],
-            dest_root=d["dest_root"],
+            dest_roots=list(dest),
             items=d["items"],
             created_at=d.get("created_at", ""),
             verify_after_copy=d.get("verify_after_copy", True),
@@ -66,11 +71,11 @@ class CardJob:
         )
 
     @staticmethod
-    def new(label: str, source_root: str, dest_root: str) -> "CardJob":
-        """工厂方法：生成带唯一 id 的新任务。"""
+    def new(label: str, source_root: str, dest_roots: List[str]) -> "CardJob":
+        """工厂方法：生成带唯一 id 的新任务。dest_roots 为目录列表（可多个）。"""
         return CardJob(
             id=uuid.uuid4().hex[:12],
             label=label,
             source_root=source_root,
-            dest_root=dest_root,
+            dest_roots=list(dest_roots),
         )

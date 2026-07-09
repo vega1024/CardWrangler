@@ -1,8 +1,9 @@
 """单个待转卡文件的数据模型。"""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
+from typing import List
 
 
 class ItemStatus(str, Enum):
@@ -16,32 +17,34 @@ class ItemStatus(str, Enum):
 
 @dataclass
 class Item:
-    """存储卡上的一个文件，以及它的转卡 / 校验结果。"""
+    """存储卡上的一个文件，以及它在各目标目录的转卡 / 校验结果。"""
 
     id: str
     name: str
     source_path: str
-    dest_path: str = ""
+    dest_paths: List[str] = field(default_factory=list)   # 每个目标目录下的绝对路径
     size: int = 0
     status: ItemStatus = ItemStatus.PENDING
     checksum_source: str = ""
-    checksum_dest: str = ""
+    checksums_dest: List[str] = field(default_factory=list)  # 与各 dest_paths 一一对应
     error: str = ""
 
     def verified(self) -> bool:
-        """源与目标校验和一致才算校验通过。"""
-        return bool(self.checksum_source) and self.checksum_source == self.checksum_dest
+        """所有目标目录的校验和都与源一致才算通过。"""
+        if not self.checksum_source:
+            return False
+        return all(c and c == self.checksum_source for c in self.checksums_dest)
 
     def to_dict(self) -> dict:
         return {
             "id": self.id,
             "name": self.name,
             "source_path": self.source_path,
-            "dest_path": self.dest_path,
+            "dest_paths": self.dest_paths,
             "size": self.size,
             "status": self.status.value,
             "checksum_source": self.checksum_source,
-            "checksum_dest": self.checksum_dest,
+            "checksums_dest": self.checksums_dest,
             "error": self.error,
         }
 
@@ -53,10 +56,10 @@ class Item:
             id=d["id"],
             name=d["name"],
             source_path=d["source_path"],
-            dest_path=d.get("dest_path", ""),
+            dest_paths=d.get("dest_paths", []),
             size=d.get("size", 0),
             status=d["status"],
             checksum_source=d.get("checksum_source", ""),
-            checksum_dest=d.get("checksum_dest", ""),
+            checksums_dest=d.get("checksums_dest", []),
             error=d.get("error", ""),
         )

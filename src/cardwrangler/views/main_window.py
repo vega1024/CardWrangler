@@ -101,16 +101,21 @@ class MainWindow(QMainWindow):
 
     # ---------- 交互 ----------
     def _add_card(self) -> None:
+        default_dest = str(self.settings.value("default_dest", ""))
+        try:
+            default_count = int(self.settings.value("default_target_count", 1))
+        except (TypeError, ValueError):
+            default_count = 1
         dlg = AddCardDialog(
-            self, default_dest=str(self.settings.value("default_dest", ""))
+            self, default_dest=default_dest, default_target_count=default_count
         )
         if dlg.exec() != QDialog.Accepted:
             return
 
         source = dlg.source
-        dest = dlg.dest
+        targets = dlg.targets
         label = source.rstrip("/").split("/")[-1] or "未命名卡"
-        job = CardJob.new(label, source, dest)
+        job = CardJob.new(label, source, targets)
         job.verify_after_copy = bool(self.settings.value("verify_after_copy", True, type=bool))
         job.checksum_algorithm = str(self.settings.value("checksum_algorithm", "sha256"))
         self.vm.add_job(job)
@@ -150,6 +155,7 @@ class MainWindow(QMainWindow):
                 "verify_after_copy": bool(self.settings.value("verify_after_copy", True, type=bool)),
                 "checksum_algorithm": str(self.settings.value("checksum_algorithm", "sha256")),
                 "default_dest": str(self.settings.value("default_dest", "")),
+                "default_target_count": int(self.settings.value("default_target_count", 1)),
             }
         )
         if dlg.exec() == SettingsView.Accepted:
@@ -157,6 +163,7 @@ class MainWindow(QMainWindow):
             self.settings.setValue("verify_after_copy", v["verify_after_copy"])
             self.settings.setValue("checksum_algorithm", v["checksum_algorithm"])
             self.settings.setValue("default_dest", v["default_dest"])
+            self.settings.setValue("default_target_count", v["default_target_count"])
 
     def _open_compare(self) -> None:
         dlg = CompareDialog(self)

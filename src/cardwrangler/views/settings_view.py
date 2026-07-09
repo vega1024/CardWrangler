@@ -1,4 +1,4 @@
-"""设置对话框：拷贝后校验开关、校验算法、默认目标目录。"""
+"""设置对话框：拷贝后校验开关、校验算法、默认目标目录、默认目标数量。"""
 from __future__ import annotations
 
 from PySide6.QtWidgets import (
@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QPushButton,
     QCheckBox,
+    QSpinBox,
 )
 
 
@@ -17,7 +18,7 @@ class SettingsView(QDialog):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self.setWindowTitle("设置")
-        self.resize(420, 180)
+        self.resize(420, 200)
 
         layout = QFormLayout(self)
 
@@ -33,10 +34,16 @@ class SettingsView(QDialog):
         browse = QPushButton("浏览…")
         browse.clicked.connect(self._browse)
 
+        self.target_count = QSpinBox()
+        self.target_count.setMinimum(1)
+        self.target_count.setMaximum(20)
+        self.target_count.setValue(1)
+
         layout.addRow(self.verify)
         layout.addRow("校验算法", self.algorithm)
         layout.addRow("默认目标", self.dest)
         layout.addRow("", browse)
+        layout.addRow("默认目标数量", self.target_count)
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self.accept)
@@ -54,9 +61,11 @@ class SettingsView(QDialog):
             "verify_after_copy": self.verify.isChecked(),
             "checksum_algorithm": self.algorithm.currentText(),
             "default_dest": self.dest.text(),
+            "default_target_count": self.target_count.value(),
         }
 
     def set_values(self, v: dict) -> None:
         self.verify.setChecked(v.get("verify_after_copy", True))
         self.algorithm.setCurrentText(v.get("checksum_algorithm", "sha256"))
         self.dest.setText(v.get("default_dest", ""))
+        self.target_count.setValue(int(v.get("default_target_count", 1)))

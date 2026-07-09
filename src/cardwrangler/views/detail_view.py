@@ -4,7 +4,7 @@ from __future__ import annotations
 from PySide6.QtWidgets import QLabel, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget
 
 from ..models.card_job import CardJob
-from ..models.item import Item
+from ..models.item import Item, ItemStatus
 
 
 class DetailView(QWidget):
@@ -37,7 +37,8 @@ class DetailView(QWidget):
             self._add_row(item)
         verified = job.verified_count
         self.status.setText(
-            f"任务：{job.label} · {len(job.items)} 个文件 · 已校验 {verified}"
+            f"任务：{job.label} · {len(job.items)} 个文件 · "
+            f"{len(job.dest_roots)} 个目标 · 已校验 {verified}"
         )
 
     def _add_row(self, item: Item) -> None:
@@ -55,5 +56,10 @@ class DetailView(QWidget):
             return
         self.table.setItem(row, 1, QTableWidgetItem(item.status.value))
         self.table.setItem(row, 2, QTableWidgetItem(f"{percent}%"))
-        if item.checksum_source and item.checksum_dest:
-            self.table.setItem(row, 3, QTableWidgetItem("✓" if item.verified() else "✗"))
+        if item.status == ItemStatus.VERIFIED:
+            mark = "✓"
+        elif item.status == ItemStatus.FAILED:
+            mark = "✗"
+        else:
+            mark = ""
+        self.table.setItem(row, 3, QTableWidgetItem(mark))
