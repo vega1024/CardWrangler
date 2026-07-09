@@ -118,7 +118,7 @@ class DetailView(QWidget):
             return
 
         for di, root in enumerate(job.dest_roots):
-            card = _TargetCard(di, root, root)
+            card = _TargetCard(di, root)
             card.table = QTableWidget(0, 2)
             card.table.setHorizontalHeaderLabels(["文件", "校验"])
             card.table.horizontalHeader().setStretchLastSection(True)
