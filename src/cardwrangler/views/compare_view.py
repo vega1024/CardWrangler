@@ -8,14 +8,15 @@ from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
     QFormLayout,
+    QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
     QProgressBar,
     QPushButton,
-    QTreeWidget,
-    QTreeWidgetItem,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -30,6 +31,8 @@ ROW_COLORS = {
     CompareStatus.MISSING_IN_B: QColor(250, 235, 210),  # 浅橙
     CompareStatus.EXTRA_IN_B: QColor(235, 225, 250),  # 浅紫
 }
+
+_HEADERS = ["相对路径", "结果", "大小 A", "大小 B", "校验和 A", "校验和 B"]
 
 
 class CompareDialog(QDialog):
@@ -77,25 +80,30 @@ class CompareDialog(QDialog):
         self.summary = QLabel("选择两个路径后点击「开始比对」")
         layout.addWidget(self.summary)
 
-        # 结果树：两个分组（不一致默认展开，一致默认折叠）
-        self.tree = QTreeWidget()
-        self.tree.setColumnCount(6)
-        self.tree.setHeaderLabels(
-            ["相对路径", "结果", "大小 A", "大小 B", "校验和 A", "校验和 B"]
-        )
-        self.tree.header().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.tree.header().setSectionResizeMode(4, QHeaderView.Stretch)
-        self.tree.header().setSectionResizeMode(5, QHeaderView.Stretch)
-        self.tree.setAlternatingRowColors(True)
-        self.tree.setExpandsOnDoubleClick(True)
-        layout.addWidget(self.tree)
+        # 结果区：两个独立表格（不一致常显，一致默认折叠）
+        self.mismatch_box = QGroupBox("不一致 (0)")
+        self.mismatch_box.setCheckable(False)
+        self.mismatch_table = self._make_table()
+        self.mismatch_box.setLayout(QVBoxLayout())
+        self.mismatch_box.layout().addWidget(self.mismatch_table)
+        layout.addWidget(self.mismatch_box)
 
-        self.g_mismatch = QTreeWidgetItem(["不一致 (0)", "", "", "", "", ""])
-        self.g_match = QTreeWidgetItem(["一致 (0)", "", "", "", "", ""])
-        self.tree.addTopLevelItem(self.g_mismatch)
-        self.tree.addTopLevelItem(self.g_match)
-        self.g_mismatch.setExpanded(True)   # 默认展开：先看问题
-        self.g_match.setExpanded(False)     # 默认折叠：一致的想看再点开
+        self.match_box = QGroupBox("一致 (0)")
+        self.match_box.setCheckable(True)
+        self.match_box.setChecked(False)   # 默认折叠：想看再点开标题
+        self.match_table = self._make_table()
+        self.match_box.setLayout(QVBoxLayout())
+        self.match_box.layout().addWidget(self.match_table)
+        layout.addWidget(self.match_box)
+
+    def _make_table(self) -> QTableWidget:
+        t = QTableWidget(0, 6)
+        t.setHorizontalHeaderLabels(_HEADERS)
+        t.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        t.horizontalHeader().setSectionResizeMode(4, QHeaderView.Stretch)
+        t.horizontalHeader().setSectionResizeMode(5, QHeaderView.Stretch)
+        t.setAlternatingRowColors(True)
+        return t
 
     def _with_browse(self, line: QLineEdit) -> QWidget:
         row = QHBoxLayout()
@@ -119,13 +127,11 @@ class CompareDialog(QDialog):
             self.summary.setText("请先选择路径 A 和路径 B。")
             return
         self.start_btn.setEnabled(False)
-        # 清空上一次的分组内容，但保留分组节点与展开状态
-        self.g_mismatch.takeChildren()
-        self.g_match.takeChildren()
-        self.g_mismatch.setText(0, "不一致 (0)")
-        self.g_match.setText(0, "一致 (0)")
-        self.g_mismatch.setExpanded(True)
-        self.g_match.setExpanded(False)
+        self.mismatch_table.setRowCount(0)
+        self.match_table.setRowCount(0)
+        self.mismatch_box.setTitle("不一致 (0)")
+        self.match_box.setTitle("一致 (0)")
+        self.match_box.setChecked(False)   # 每次重新折叠一致表
         self.progress.setValue(0)
         self.summary.setText("比对中…")
         self.worker = CompareWorker(a, b, self.algorithm.currentText())
@@ -150,26 +156,30 @@ class CompareDialog(QDialog):
     # ---------- 渲染 ----------
     def _append_entry(self, entry: CompareEntry) -> None:
         is_match = entry.status == CompareStatus.MATCH
-        group = self.g_match if is_match else self.g_mismatch
-        child = QTreeWidgetItem(
-            [
-                entry.rel_path,
-                STATUS_LABELS[entry.status],
-                self._fmt_size(entry.size_a),
-                self._fmt_size(entry.size_b),
-                entry.checksum_a or "—",
-                entry.checksum_b or "—",
-            ]
-        )
-        child.setFlags(child.flags() & ~Qt.ItemIsEditable)
+        table = self.match_table if is_match else self.mismatch_table
+        row = table.rowCount()
+        table.insertRow(row)
+
+        values = [
+            entry.rel_path,
+            STATUS_LABELS[entry.status],
+            self._fmt_size(entry.size_a),
+            self._fmt_size(entry.size_b),
+            entry.checksum_a or "—",
+            entry.checksum_b or "—",
+        ]
         color = ROW_COLORS.get(entry.status)
-        if color is not None:
-            for c in range(child.columnCount()):
-                child.setBackground(c, color)
-        group.addChild(child)
-        # 刷新分组计数
-        label = "一致" if is_match else "不一致"
-        group.setText(0, f"{label} ({group.childCount()})")
+        for col, text in enumerate(values):
+            item = QTableWidgetItem(str(text))
+            item.setFlags(item.flags() & ~Qt.ItemIsEditable)
+            if color is not None:
+                item.setBackground(color)
+            table.setItem(row, col, item)
+
+        if is_match:
+            self.match_box.setTitle(f"一致 ({table.rowCount()})")
+        else:
+            self.mismatch_box.setTitle(f"不一致 ({table.rowCount()})")
 
     def _show_summary(self, results) -> None:
         n = len(results)
