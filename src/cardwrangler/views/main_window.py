@@ -81,6 +81,7 @@ class MainWindow(QMainWindow):
 
         self.sidebar.add_requested.connect(self._add_card)
         self.sidebar.job_selected.connect(self._on_sidebar_selected)
+        self.sidebar.delete_requested.connect(self._remove_card)
 
     # ---------- 视图模型回调 ----------
     def _on_jobs_changed(self, jobs) -> None:
@@ -95,6 +96,24 @@ class MainWindow(QMainWindow):
         job = self.vm.find_job(job_id)
         if job:
             self.vm.select_job(job)
+
+    def _remove_card(self, job_id: str) -> None:
+        job = self.vm.find_job(job_id)
+        if job is None:
+            return
+        # 正在转卡的任务不允许删除，避免与后台线程竞争
+        if self.vm.is_busy and self.vm.selected_job and self.vm.selected_job.id == job_id:
+            QMessageBox.information(self, "提示", "该任务正在转卡中，请等待完成后再删除。")
+            return
+        reply = QMessageBox.question(
+            self,
+            "删除任务",
+            f"确定删除「{job.label}」？该操作不可撤销。",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        self.vm.remove_job(job)
 
     def _refresh_jobs(self) -> None:
         self.sidebar.set_jobs(self.vm.jobs)

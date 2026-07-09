@@ -11,6 +11,7 @@ from .components.card_row import make_card_row
 class SidebarView(QWidget):
     job_selected = Signal(str)   # 选中的任务 id
     add_requested = Signal()     # 点击「添加存储卡」
+    delete_requested = Signal(str)  # 请求删除某任务 id
 
     def __init__(self) -> None:
         super().__init__()
@@ -34,4 +35,6 @@ class SidebarView(QWidget):
             item.setData(Qt.UserRole, job.id)
             item.setSizeHint(QSize(0, 46))
             self.list.addItem(item)
-            self.list.setItemWidget(item, make_card_row(job))
+            self.list.setItemWidget(
+                item, make_card_row(job, lambda jid: self.delete_requested.emit(jid))
+            )
