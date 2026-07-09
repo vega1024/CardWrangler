@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+*.so
+
+# 虚拟环境
+.venv/
+venv/
+env/
+
+# 测试
+.pytest_cache/
+.coverage
+
+# 应用数据（运行期生成的任务记录）
+data/
+
+# 编辑器 / 系统
+.idea/
+.vscode/
+.DS_Store
