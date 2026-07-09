@@ -47,27 +47,44 @@ def offload_item(
 ) -> Item:
     """拷贝单个文件到所有目标目录，并按需做校验和比对。
 
-    拷贝按 1MB 分块进行并回调进度；verify=True 时对每个目标分别计算校验和，
-    全部与源一致才标记 VERIFIED，否则标记 FAILED。
+    进度按「阶段」平滑推进：源校验(1) + 每个目标[拷贝(1) + 校验(1)]。
+    拷贝与校验都会分块回调进度，避免界面在校验阶段「假死」。
     """
     item.status = ItemStatus.OFFLOADING
-    total = item.size or 1
     n_dest = max(1, len(item.dest_paths))
+    step = 2 if verify else 1
+    total_phases = 1 + step * n_dest  # 源校验(1) + 每个目标的阶段
+    cur = 0  # 当前阶段序号（0 = 源校验；无校验时直接为首个拷贝阶段）
+
+    _last_pct = {"v": -1}
+
+    def emit(frac: float) -> None:
+        """上报进度，带 1% 节流，避免海量信号冲刷 UI 线程。"""
+        if on_progress is None:
+            return
+        pct = min(100, int((cur + max(0.0, min(1.0, frac))) / total_phases * 100))
+        if pct != _last_pct["v"]:
+            _last_pct["v"] = pct
+            on_progress(item, pct)
 
     # 先计算源端校验和（仅校验模式需要）
     if verify:
         try:
-            item.checksum_source = compute_checksum(item.source_path, algorithm)
+            item.checksum_source = compute_checksum(
+                item.source_path, algorithm, on_progress=lambda f: emit(f)
+            )
         except OSError as exc:
             item.status = ItemStatus.FAILED
             item.error = str(exc)
             return item
+        cur = 1  # 源校验完成，进入首个目标阶段
 
     all_ok = True
     item.checksums_dest = []
-    for di, dest in enumerate(item.dest_paths):
+    for dest in item.dest_paths:
         d = Path(dest)
         d.parent.mkdir(parents=True, exist_ok=True)
+        total = item.size or 1
         copied = 0
         try:
             with open(item.source_path, "rb") as src, open(d, "wb") as dst:
@@ -77,17 +94,16 @@ def offload_item(
                         break
                     dst.write(chunk)
                     copied += len(chunk)
-                    if on_progress:
-                        frac = (di + min(1.0, copied / total)) / n_dest
-                        on_progress(item, min(100, int(frac * 100)))
+                    emit(copied / total)
         except OSError as exc:
             item.status = ItemStatus.FAILED
             item.error = str(exc)
             return item
+        cur += 1  # 拷贝完成，进入校验阶段
 
         if verify:
             try:
-                cd = compute_checksum(dest, algorithm)
+                cd = compute_checksum(dest, algorithm, on_progress=lambda f: emit(f))
             except OSError as exc:
                 item.status = ItemStatus.FAILED
                 item.error = str(exc)
@@ -95,8 +111,10 @@ def offload_item(
             item.checksums_dest.append(cd)
             if cd != item.checksum_source:
                 all_ok = False
+            cur += 1  # 校验完成
         else:
             item.checksums_dest.append("")
+            cur += 1
 
     item.status = (
         ItemStatus.VERIFIED
@@ -104,8 +122,7 @@ def offload_item(
         else ItemStatus.FAILED
     )
 
-    if on_progress:
-        on_progress(item, 100)
+    emit(1.0)
     return item
 
 

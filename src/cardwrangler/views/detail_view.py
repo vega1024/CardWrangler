@@ -56,10 +56,18 @@ class DetailView(QWidget):
             return
         self.table.setItem(row, 1, QTableWidgetItem(item.status.value))
         self.table.setItem(row, 2, QTableWidgetItem(f"{percent}%"))
+
+        n = len(item.dest_paths)
+        done = sum(
+            1 for c in item.checksums_dest if item.checksum_source and c == item.checksum_source
+        )
         if item.status == ItemStatus.VERIFIED:
-            mark = "✓"
+            mark = f"✓ {done}/{n}"
         elif item.status == ItemStatus.FAILED:
             mark = "✗"
+        elif item.checksums_dest or item.checksum_source:
+            # 正在逐目标校验：已完成的 + 进行中的
+            mark = f"校验 {done}/{n}"
         else:
             mark = ""
         self.table.setItem(row, 3, QTableWidgetItem(mark))
