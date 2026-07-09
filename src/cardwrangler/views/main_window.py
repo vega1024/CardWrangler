@@ -4,7 +4,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt, QSettings
 from PySide6.QtWidgets import (
     QApplication,
-    QFileDialog,
+    QDialog,
     QHBoxLayout,
     QMainWindow,
     QMessageBox,
@@ -20,6 +20,7 @@ from .detail_view import DetailView
 from .settings_view import SettingsView
 from .sidebar_view import SidebarView
 from .compare_view import CompareDialog
+from .add_card_view import AddCardDialog
 from .workers import OffloadWorker
 
 
@@ -100,18 +101,14 @@ class MainWindow(QMainWindow):
 
     # ---------- 交互 ----------
     def _add_card(self) -> None:
-        source = QFileDialog.getExistingDirectory(self, "选择存储卡（源目录）")
-        if not source:
+        dlg = AddCardDialog(
+            self, default_dest=str(self.settings.value("default_dest", ""))
+        )
+        if dlg.exec() != QDialog.Accepted:
             return
 
-        default_dest = self.settings.value("default_dest", "")
-        if default_dest:
-            dest = default_dest
-        else:
-            dest = QFileDialog.getExistingDirectory(self, "选择转卡目标目录")
-            if not dest:
-                return
-
+        source = dlg.source
+        dest = dlg.dest
         label = source.rstrip("/").split("/")[-1] or "未命名卡"
         job = CardJob.new(label, source, dest)
         job.verify_after_copy = bool(self.settings.value("verify_after_copy", True, type=bool))
