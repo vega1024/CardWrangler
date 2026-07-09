@@ -89,11 +89,15 @@ class CompareDialog(QDialog):
         layout.addWidget(self.mismatch_box)
 
         self.match_box = QGroupBox("一致 (0)")
-        self.match_box.setCheckable(True)
-        self.match_box.setChecked(False)   # 默认折叠：想看再点开标题
+        self.match_box.setCheckable(False)
+        mb_layout = QVBoxLayout()
+        self.match_toggle = QPushButton("▸ 展开一致结果")
+        self.match_toggle.clicked.connect(self._toggle_match)
+        mb_layout.addWidget(self.match_toggle)
         self.match_table = self._make_table()
-        self.match_box.setLayout(QVBoxLayout())
-        self.match_box.layout().addWidget(self.match_table)
+        self.match_table.setVisible(False)   # 默认折叠：想看再点开
+        mb_layout.addWidget(self.match_table)
+        self.match_box.setLayout(mb_layout)
         layout.addWidget(self.match_box)
 
     def _make_table(self) -> QTableWidget:
@@ -131,7 +135,8 @@ class CompareDialog(QDialog):
         self.match_table.setRowCount(0)
         self.mismatch_box.setTitle("不一致 (0)")
         self.match_box.setTitle("一致 (0)")
-        self.match_box.setChecked(False)   # 每次重新折叠一致表
+        self.match_table.setVisible(False)
+        self.match_toggle.setText("▸ 展开一致结果")   # 每次重新折叠一致表
         self.progress.setValue(0)
         self.summary.setText("比对中…")
         self.worker = CompareWorker(a, b, self.algorithm.currentText())
@@ -152,6 +157,11 @@ class CompareDialog(QDialog):
     def _on_error(self, message: str) -> None:
         self.start_btn.setEnabled(True)
         self.summary.setText(f"比对出错：{message}")
+
+    def _toggle_match(self) -> None:
+        visible = not self.match_table.isVisible()
+        self.match_table.setVisible(visible)
+        self.match_toggle.setText("▾ 收起一致结果" if visible else "▸ 展开一致结果")
 
     # ---------- 渲染 ----------
     def _append_entry(self, entry: CompareEntry) -> None:
