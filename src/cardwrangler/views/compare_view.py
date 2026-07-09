@@ -14,8 +14,8 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QProgressBar,
     QPushButton,
-    QTableWidget,
-    QTableWidgetItem,
+    QTreeWidget,
+    QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -77,16 +77,25 @@ class CompareDialog(QDialog):
         self.summary = QLabel("选择两个路径后点击「开始比对」")
         layout.addWidget(self.summary)
 
-        # 结果表
-        self.table = QTableWidget(0, 6)
-        self.table.setHorizontalHeaderLabels(
+        # 结果树：两个分组（不一致默认展开，一致默认折叠）
+        self.tree = QTreeWidget()
+        self.tree.setColumnCount(6)
+        self.tree.setHeaderLabels(
             ["相对路径", "结果", "大小 A", "大小 B", "校验和 A", "校验和 B"]
         )
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.Stretch)
-        self.table.setAlternatingRowColors(True)
-        layout.addWidget(self.table)
+        self.tree.header().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.tree.header().setSectionResizeMode(4, QHeaderView.Stretch)
+        self.tree.header().setSectionResizeMode(5, QHeaderView.Stretch)
+        self.tree.setAlternatingRowColors(True)
+        self.tree.setExpandsOnDoubleClick(True)
+        layout.addWidget(self.tree)
+
+        self.g_mismatch = QTreeWidgetItem(["不一致 (0)", "", "", "", "", ""])
+        self.g_match = QTreeWidgetItem(["一致 (0)", "", "", "", "", ""])
+        self.tree.addTopLevelItem(self.g_mismatch)
+        self.tree.addTopLevelItem(self.g_match)
+        self.g_mismatch.setExpanded(True)   # 默认展开：先看问题
+        self.g_match.setExpanded(False)     # 默认折叠：一致的想看再点开
 
     def _with_browse(self, line: QLineEdit) -> QWidget:
         row = QHBoxLayout()
@@ -110,7 +119,13 @@ class CompareDialog(QDialog):
             self.summary.setText("请先选择路径 A 和路径 B。")
             return
         self.start_btn.setEnabled(False)
-        self.table.setRowCount(0)
+        # 清空上一次的分组内容，但保留分组节点与展开状态
+        self.g_mismatch.takeChildren()
+        self.g_match.takeChildren()
+        self.g_mismatch.setText(0, "不一致 (0)")
+        self.g_match.setText(0, "一致 (0)")
+        self.g_mismatch.setExpanded(True)
+        self.g_match.setExpanded(False)
         self.progress.setValue(0)
         self.summary.setText("比对中…")
         self.worker = CompareWorker(a, b, self.algorithm.currentText())
@@ -121,7 +136,7 @@ class CompareDialog(QDialog):
 
     def _on_progress(self, entry: CompareEntry, percent: int) -> None:
         self.progress.setValue(percent)
-        self._append_row(entry)
+        self._append_entry(entry)
 
     def _on_finished(self, results) -> None:
         self.start_btn.setEnabled(True)
@@ -133,25 +148,28 @@ class CompareDialog(QDialog):
         self.summary.setText(f"比对出错：{message}")
 
     # ---------- 渲染 ----------
-    def _append_row(self, entry: CompareEntry) -> None:
-        row = self.table.rowCount()
-        self.table.insertRow(row)
-        self._set(row, 0, entry.rel_path)
-        self._set(row, 1, STATUS_LABELS[entry.status])
-        self._set(row, 2, self._fmt_size(entry.size_a))
-        self._set(row, 3, self._fmt_size(entry.size_b))
-        self._set(row, 4, entry.checksum_a or "—")
-        self._set(row, 5, entry.checksum_b or "—")
-
+    def _append_entry(self, entry: CompareEntry) -> None:
+        is_match = entry.status == CompareStatus.MATCH
+        group = self.g_match if is_match else self.g_mismatch
+        child = QTreeWidgetItem(
+            [
+                entry.rel_path,
+                STATUS_LABELS[entry.status],
+                self._fmt_size(entry.size_a),
+                self._fmt_size(entry.size_b),
+                entry.checksum_a or "—",
+                entry.checksum_b or "—",
+            ]
+        )
+        child.setFlags(child.flags() & ~Qt.ItemIsEditable)
         color = ROW_COLORS.get(entry.status)
         if color is not None:
-            for c in range(self.table.columnCount()):
-                self.table.item(row, c).setBackground(color)
-
-    def _set(self, row: int, col: int, text: str) -> None:
-        item = QTableWidgetItem(str(text))
-        item.setFlags(item.flags() & ~Qt.ItemIsEditable)
-        self.table.setItem(row, col, item)
+            for c in range(child.columnCount()):
+                child.setBackground(c, color)
+        group.addChild(child)
+        # 刷新分组计数
+        label = "一致" if is_match else "不一致"
+        group.setText(0, f"{label} ({group.childCount()})")
 
     def _show_summary(self, results) -> None:
         n = len(results)
