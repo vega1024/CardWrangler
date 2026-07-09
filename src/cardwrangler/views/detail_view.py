@@ -23,6 +23,27 @@ from ..models.card_job import CardJob
 from ..models.item import Item, ItemStatus
 
 
+class _ElidedLabel(QLabel):
+    """单行 QLabel，文本过长时在中间省略（保留头尾路径）。"""
+
+    def __init__(self, text: str) -> None:
+        super().__init__(text)
+        self._full = text
+        self.setWordWrap(False)
+
+    def setText(self, text: str) -> None:  # type: ignore[override]
+        self._full = text
+        super().setText(text)
+
+    def resizeEvent(self, event) -> None:  # type: ignore[override]
+        super().resizeEvent(event)
+        elided = self.fontMetrics().elidedText(
+            self._full, Qt.TextElideMode.ElideMiddle, self.width()
+        )
+        if elided != self.text():
+            super().setText(elided)
+
+
 class _TargetCard(QWidget):
     """单个目标卡片：可点击标题展开 / 折叠。"""
 
@@ -54,10 +75,8 @@ class _TargetCard(QWidget):
 
         self.arrow_label = QLabel("▸")
         self.arrow_label.setStyleSheet("font-weight:700; color:#374151;")
-        self.path_label = QLabel(full_path)
+        self.path_label = _ElidedLabel(full_path)
         self.path_label.setToolTip(full_path)
-        self.path_label.setTextElideMode(Qt.TextElideMode.ElideMiddle)
-        self.path_label.setWordWrap(False)
         self.status_label = QLabel("")
         self.status_label.setStyleSheet("font-weight:600;")
         hlayout.addWidget(self.arrow_label)
