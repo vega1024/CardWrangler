@@ -1,16 +1,17 @@
 """详情区：选中任务按「目标」分卡片展示。
 
-- 每个目标（拷贝目的地）一张卡片，默认只显示目标名 + 成功/失败。
+- 每个目标（拷贝目的地）一张卡片，默认只显示目标路径 + 成功/失败。
 - 点击卡片标题展开，显示该目标下每个文件的校验结果（✓/✗）。
 """
 from __future__ import annotations
 
-from pathlib import Path
 from typing import List, Optional
 
+from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent
 from PySide6.QtWidgets import (
     QLabel,
-    QPushButton,
+    QHBoxLayout,
     QScrollArea,
     QTableWidget,
     QTableWidgetItem,
@@ -25,16 +26,14 @@ from ..models.item import Item, ItemStatus
 class _TargetCard(QWidget):
     """单个目标卡片：可点击标题展开 / 折叠。"""
 
-    _BASE_STYLE = (
-        "QPushButton{text-align:left; padding:7px 10px; "
-        "border:1px solid #d1d5db; border-radius:6px; font-weight:600; "
-        "background:#f9fafb;}"
+    _HEADER_STYLE = (
+        "QWidget#cardHeader{background:#f9fafb; border:1px solid #d1d5db; "
+        "border-radius:6px; padding:7px 10px;}"
     )
 
-    def __init__(self, di: int, name: str, full_path: str) -> None:
+    def __init__(self, di: int, full_path: str) -> None:
         super().__init__()
         self.di = di
-        self.name = name
         self.full_path = full_path
         self.expanded = False
         self.row_for: dict[str, int] = {}
@@ -44,9 +43,26 @@ class _TargetCard(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
 
-        self.header = QPushButton()
-        self.header.setToolTip(full_path)
-        self.header.clicked.connect(self.toggle)
+        self.header = QWidget()
+        self.header.setObjectName("cardHeader")
+        self.header.setStyleSheet(self._HEADER_STYLE)
+        self.header.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.header.installEventFilter(self)
+        hlayout = QHBoxLayout(self.header)
+        hlayout.setContentsMargins(0, 0, 0, 0)
+        hlayout.setSpacing(8)
+
+        self.arrow_label = QLabel("▸")
+        self.arrow_label.setStyleSheet("font-weight:700; color:#374151;")
+        self.path_label = QLabel(full_path)
+        self.path_label.setToolTip(full_path)
+        self.path_label.setTextElideMode(Qt.TextElideMode.ElideMiddle)
+        self.path_label.setWordWrap(False)
+        self.status_label = QLabel("")
+        self.status_label.setStyleSheet("font-weight:600;")
+        hlayout.addWidget(self.arrow_label)
+        hlayout.addWidget(self.path_label, 1)
+        hlayout.addWidget(self.status_label)
         layout.addWidget(self.header)
 
         self.body = QWidget()
@@ -55,15 +71,20 @@ class _TargetCard(QWidget):
         layout.addWidget(self.body)
         self.body.setVisible(False)
 
+    def eventFilter(self, obj, event) -> bool:
+        if obj is self.header and event.type() == QEvent.Type.MouseButtonPress:
+            self.toggle()
+            return True
+        return super().eventFilter(obj, event)
+
     def toggle(self) -> None:
         self.expanded = not self.expanded
         self.body.setVisible(self.expanded)
-        # 箭头刷新由 set_status 负责（沿用当前文案）
+        self.arrow_label.setText("▾" if self.expanded else "▸")
 
     def set_status(self, text: str, color: str) -> None:
-        arrow = "▾" if self.expanded else "▸"
-        self.header.setText(f"{arrow}  目标 {self.di + 1} · {self.name}    —  {text}")
-        self.header.setStyleSheet(self._BASE_STYLE + f" color:{color};")
+        self.status_label.setText(text)
+        self.status_label.setStyleSheet(f"font-weight:600; color:{color};")
 
 
 class DetailView(QWidget):
@@ -97,8 +118,7 @@ class DetailView(QWidget):
             return
 
         for di, root in enumerate(job.dest_roots):
-            name = Path(root).name or root
-            card = _TargetCard(di, name, root)
+            card = _TargetCard(di, root, root)
             card.table = QTableWidget(0, 2)
             card.table.setHorizontalHeaderLabels(["文件", "校验"])
             card.table.horizontalHeader().setStretchLastSection(True)
@@ -155,12 +175,12 @@ class DetailView(QWidget):
                 elif it.checksums_dest[di]:
                     failed += 1
         if not job.verify_after_copy:
-            return (f"已拷贝 {total}", "#2563eb", total)
+            return ("已拷贝", "#2563eb", total)
         if total > 0 and verified == total:
-            return (f"成功 {verified}/{total}", "#16a34a", verified)
+            return ("成功", "#16a34a", verified)
         if failed > 0 or verified < total:
-            return (f"失败 {verified}/{total}", "#dc2626", verified)
-        return (f"校验中 {verified}/{total}", "#6b7280", verified)
+            return ("失败", "#dc2626", verified)
+        return ("校验中", "#6b7280", verified)
 
     def _clear_cards(self) -> None:
         for card in self.cards:
