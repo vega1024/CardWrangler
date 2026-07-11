@@ -265,9 +265,10 @@ class _JobCard(QWidget):
         )
         table.setEditTriggers(table.EditTrigger.NoEditTriggers)
         table.verticalHeader().setVisible(False)
-        table.setColumnWidth(0, 180)
+        table.setColumnWidth(0, 220)
         table.setColumnWidth(1, 100)
         table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        table.verticalHeader().setDefaultSectionSize(40)
         table.setShowGrid(False)
         table.setStyleSheet(
             "QTableWidget{border:1px solid #e5e7eb; border-radius:8px; "
@@ -290,19 +291,15 @@ class _JobCard(QWidget):
         root = job.dest_roots[di]
         vol, cap = _disk_info(root)
 
-        # 目标盘信息
+        # 目标盘信息：卷名 + 容量合在一行显示，避免两行贴在一起/被截断
         info = QWidget()
         il = QHBoxLayout(info)
         il.setContentsMargins(0, 0, 0, 0)
         il.setSpacing(8)
-        il.addWidget(_colored_box("#85B7EB" if di == 0 else "#e5e5e5", 28, 4))
-        vcol = QVBoxLayout()
-        vcol.setContentsMargins(0, 0, 0, 0)
-        vcol.setSpacing(1)
-        vcol.addWidget(_label(vol, "font-weight:600; font-size:13px; color:#111827;"))
-        vcol.addWidget(_label(cap, "color:#6b7280; font-size:12px; padding-top:1px;"))
-        il.addLayout(vcol)
-        il.addStretch(1)
+        il.addWidget(_colored_box("#85B7EB" if di == 0 else "#e5e5e5", 28, 6))
+        line = _label(f"{vol} · {cap}", "font-weight:600; font-size:13px; color:#111827;")
+        il.addWidget(line, 1)
+        il.addStretch(0)
         table.setCellWidget(di, 0, info)
 
         # 拷贝容量
