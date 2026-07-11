@@ -24,6 +24,7 @@ class SidebarView(QWidget):
         self.list.itemClicked.connect(lambda it: self.job_selected.emit(it.data(Qt.UserRole)))
 
         add_btn = QPushButton("+ 添加存储卡")
+        add_btn.setMinimumHeight(34)
         add_btn.clicked.connect(self.add_requested.emit)
 
         layout.addWidget(self.list)

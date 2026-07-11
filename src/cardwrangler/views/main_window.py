@@ -46,6 +46,10 @@ class MainWindow(QMainWindow):
         toolbar = QToolBar()
         self.addToolBar(toolbar)
 
+        self.add_btn = QPushButton("+ 添加源盘")
+        self.add_btn.clicked.connect(self._add_card)
+        toolbar.addWidget(self.add_btn)
+
         self.start_btn = QPushButton("▶ 开始转卡")
         self.start_btn.clicked.connect(self._start_offload)
         toolbar.addWidget(self.start_btn)
@@ -124,6 +128,12 @@ class MainWindow(QMainWindow):
 
     # ---------- 交互 ----------
     def _add_card(self) -> None:
+        try:
+            self._add_card_inner()
+        except Exception as exc:  # noqa: BLE001 - 把运行时异常暴露出来，避免静默无反应
+            QMessageBox.critical(self, "无法打开添加源盘", str(exc))
+
+    def _add_card_inner(self) -> None:
         default_dest = str(self.settings.value("default_dest", ""))
         try:
             default_count = int(self.settings.value("default_target_count", 1))
