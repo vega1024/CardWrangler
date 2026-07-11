@@ -5,6 +5,7 @@ from PySide6.QtCore import Qt, QSettings
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
+    QFileDialog,
     QHBoxLayout,
     QMainWindow,
     QMessageBox,
@@ -82,15 +83,18 @@ class MainWindow(QMainWindow):
         self.sidebar.add_requested.connect(self._add_card)
         self.sidebar.job_selected.connect(self._on_sidebar_selected)
         self.sidebar.delete_requested.connect(self._remove_card)
+        self.detail.report_requested.connect(self._export_report)
 
     # ---------- 视图模型回调 ----------
     def _on_jobs_changed(self, jobs) -> None:
         self.sidebar.set_jobs(jobs)
         if self.vm.selected_job:
-            self.detail.show_job(self.vm.selected_job)
+            self.detail.show_job(self.vm.selected_job, self.vm.jobs)
+            self.sidebar.set_selected(self.vm.selected_job.id)
 
     def _on_job_selected(self, job: CardJob | None) -> None:
-        self.detail.show_job(job)
+        self.detail.show_job(job, self.vm.jobs)
+        self.sidebar.set_selected(job.id if job else None)
 
     def _on_sidebar_selected(self, job_id: str) -> None:
         job = self.vm.find_job(job_id)
@@ -158,7 +162,7 @@ class MainWindow(QMainWindow):
     def _on_offload_finished(self, job: CardJob) -> None:
         self.vm.mark_busy(False)
         self.vm.finalize_job(job)
-        self.detail.show_job(job)
+        self.detail.show_job(job, self.vm.jobs)
         self.statusBar().showMessage(
             f"完成：{job.verified_count}/{len(job.items)} 个文件校验通过"
         )
@@ -183,6 +187,21 @@ class MainWindow(QMainWindow):
             self.settings.setValue("checksum_algorithm", v["checksum_algorithm"])
             self.settings.setValue("default_dest", v["default_dest"])
             self.settings.setValue("default_target_count", v["default_target_count"])
+
+    def _export_report(self) -> None:
+        from ..services.report_service import build_report_csv
+
+        path, _ = QFileDialog.getSaveFileName(
+            self, "导出报告", "cardwrangler_report.csv", "CSV 文件 (*.csv)"
+        )
+        if not path:
+            return
+        try:
+            with open(path, "w", encoding="utf-8-sig") as f:
+                f.write(build_report_csv(self.vm.jobs))
+            self.statusBar().showMessage(f"报告已导出：{path}")
+        except OSError as exc:
+            QMessageBox.critical(self, "导出失败", str(exc))
 
     def _open_compare(self) -> None:
         dlg = CompareDialog(self)

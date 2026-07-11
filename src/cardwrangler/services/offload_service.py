@@ -5,6 +5,8 @@
 """
 from __future__ import annotations
 
+import time
+from datetime import datetime
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -14,6 +16,11 @@ from ..utils.checksum import compute_checksum
 
 # 进度回调：传入当前 Item 与完成百分比（0–100）
 ProgressFn = Callable[[Item, int], None]
+
+
+def _now() -> str:
+    """当前时间，ISO 格式到秒，用于记录拷贝 / 校验完成时刻。"""
+    return datetime.now().isoformat(timespec="seconds")
 
 
 def scan_source(job: CardJob) -> CardJob:
@@ -51,7 +58,13 @@ def offload_item(
     拷贝与校验都会分块回调进度，避免界面在校验阶段「假死」。
     """
     item.status = ItemStatus.OFFLOADING
-    n_dest = max(1, len(item.dest_paths))
+    n = len(item.dest_paths)
+    # 初始化每目标的时间 / 耗时记录（与 dest_paths 对齐）
+    item.copy_finished_at = [""] * n
+    item.verify_finished_at = [""] * n
+    item.copy_durations = [0.0] * n
+    item.verify_durations = [0.0] * n
+    n_dest = max(1, n)
     step = 2 if verify else 1
     total_phases = 1 + step * n_dest  # 源校验(1) + 每个目标的阶段
     cur = 0  # 当前阶段序号（0 = 源校验；无校验时直接为首个拷贝阶段）
@@ -81,11 +94,12 @@ def offload_item(
 
     all_ok = True
     item.checksums_dest = []
-    for dest in item.dest_paths:
+    for di, dest in enumerate(item.dest_paths):
         d = Path(dest)
         d.parent.mkdir(parents=True, exist_ok=True)
         total = item.size or 1
         copied = 0
+        t_copy = time.monotonic()
         try:
             with open(item.source_path, "rb") as src, open(d, "wb") as dst:
                 while True:
@@ -99,15 +113,20 @@ def offload_item(
             item.status = ItemStatus.FAILED
             item.error = str(exc)
             return item
+        item.copy_durations[di] = time.monotonic() - t_copy
+        item.copy_finished_at[di] = _now()
         cur += 1  # 拷贝完成，进入校验阶段
 
         if verify:
+            t_verify = time.monotonic()
             try:
                 cd = compute_checksum(dest, algorithm, on_progress=lambda f: emit(f))
             except OSError as exc:
                 item.status = ItemStatus.FAILED
                 item.error = str(exc)
                 return item
+            item.verify_durations[di] = time.monotonic() - t_verify
+            item.verify_finished_at[di] = _now()
             item.checksums_dest.append(cd)
             if cd != item.checksum_source:
                 all_ok = False
@@ -127,10 +146,40 @@ def offload_item(
 
 
 def offload_job(job: CardJob, on_progress: Optional[ProgressFn] = None) -> CardJob:
-    """转卡整个任务：先扫描，再逐个拷贝 + 校验到所有目标目录。"""
+    """转卡整个任务：先扫描，再逐个拷贝 + 校验到所有目标目录。
+
+    结束后把每个 Item 的「每目标」拷贝 / 校验耗时与时间聚合到任务级字段，
+    方便详情界面（目标盘表格）直接展示每个目标的完成时刻与耗时。
+    """
+    overall_start = time.monotonic()
     scan_source(job)
+    n = len(job.dest_roots)
     for item in job.items:
         offload_item(item, job.verify_after_copy, job.checksum_algorithm, on_progress)
+
+    def _agg(getter) -> list:
+        return [getter(di) for di in range(n)]
+
+    job.copy_durations = [
+        sum(i.copy_durations[di] for i in job.items) for di in range(n)
+    ]
+    job.verify_durations = [
+        sum(i.verify_durations[di] for i in job.items) for di in range(n)
+    ]
+    job.copy_finished_at = _agg(
+        lambda di: max(
+            (i.copy_finished_at[di] for i in job.items if i.copy_finished_at[di]),
+            default="",
+        )
+    )
+    job.verify_finished_at = _agg(
+        lambda di: max(
+            (i.verify_finished_at[di] for i in job.items if i.verify_finished_at[di]),
+            default="",
+        )
+    )
+    job.finished_at = _now()
+    job.duration_seconds = time.monotonic() - overall_start
     job.status = (
         ItemStatus.VERIFIED
         if all(i.status == ItemStatus.VERIFIED for i in job.items)

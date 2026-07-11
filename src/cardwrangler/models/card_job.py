@@ -22,6 +22,14 @@ class CardJob:
     verify_after_copy: bool = True
     checksum_algorithm: str = "sha256"
     status: ItemStatus = ItemStatus.PENDING
+    # 任务级时间
+    finished_at: str = ""           # 任务完成时间（ISO 秒）
+    duration_seconds: float = 0.0   # 任务总耗时（秒）
+    # 每个目标的拷贝 / 校验完成时间（ISO 秒）与耗时（秒），与 dest_roots 对齐
+    copy_finished_at: List[str] = field(default_factory=list)
+    verify_finished_at: List[str] = field(default_factory=list)
+    copy_durations: List[float] = field(default_factory=list)
+    verify_durations: List[float] = field(default_factory=list)
 
     @property
     def total_bytes(self) -> int:
@@ -46,6 +54,12 @@ class CardJob:
             "verify_after_copy": self.verify_after_copy,
             "checksum_algorithm": self.checksum_algorithm,
             "status": self.status.value,
+            "finished_at": self.finished_at,
+            "duration_seconds": self.duration_seconds,
+            "copy_finished_at": self.copy_finished_at,
+            "verify_finished_at": self.verify_finished_at,
+            "copy_durations": self.copy_durations,
+            "verify_durations": self.verify_durations,
         }
 
     @classmethod
@@ -68,6 +82,12 @@ class CardJob:
             verify_after_copy=d.get("verify_after_copy", True),
             checksum_algorithm=d.get("checksum_algorithm", "sha256"),
             status=d["status"],
+            finished_at=d.get("finished_at", ""),
+            duration_seconds=d.get("duration_seconds", 0.0),
+            copy_finished_at=d.get("copy_finished_at", []),
+            verify_finished_at=d.get("verify_finished_at", []),
+            copy_durations=d.get("copy_durations", []),
+            verify_durations=d.get("verify_durations", []),
         )
 
     @staticmethod

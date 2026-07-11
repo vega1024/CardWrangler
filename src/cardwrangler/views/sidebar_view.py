@@ -5,7 +5,7 @@ from PySide6.QtCore import Qt, QSize, Signal
 from PySide6.QtWidgets import QPushButton, QListWidget, QListWidgetItem, QVBoxLayout, QWidget
 
 from ..models.card_job import CardJob
-from .components.card_row import make_card_row
+from .components.card_row import CardRow
 
 
 class SidebarView(QWidget):
@@ -15,6 +15,7 @@ class SidebarView(QWidget):
 
     def __init__(self) -> None:
         super().__init__()
+        self._selected_id: str | None = None
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
 
@@ -36,5 +37,16 @@ class SidebarView(QWidget):
             item.setSizeHint(QSize(0, 46))
             self.list.addItem(item)
             self.list.setItemWidget(
-                item, make_card_row(job, lambda jid: self.delete_requested.emit(jid))
+                item, CardRow(job, lambda jid: self.delete_requested.emit(jid))
             )
+        if self._selected_id:
+            self.set_selected(self._selected_id)
+
+    def set_selected(self, job_id: str | None) -> None:
+        """高亮选中的任务行（绿色背景）。"""
+        self._selected_id = job_id
+        for i in range(self.list.count()):
+            it = self.list.item(i)
+            w = self.list.itemWidget(it)
+            if isinstance(w, CardRow):
+                w.set_selected(it.data(Qt.UserRole) == job_id)

@@ -28,6 +28,11 @@ class Item:
     checksum_source: str = ""
     checksums_dest: List[str] = field(default_factory=list)  # 与各 dest_paths 一一对应
     error: str = ""
+    # 每个目标的拷贝 / 校验完成时间（ISO 秒）与耗时（秒），与 dest_paths 对齐
+    copy_finished_at: List[str] = field(default_factory=list)
+    verify_finished_at: List[str] = field(default_factory=list)
+    copy_durations: List[float] = field(default_factory=list)
+    verify_durations: List[float] = field(default_factory=list)
 
     def verified(self) -> bool:
         """所有目标目录的校验和都与源一致才算通过。"""
@@ -46,6 +51,10 @@ class Item:
             "checksum_source": self.checksum_source,
             "checksums_dest": self.checksums_dest,
             "error": self.error,
+            "copy_finished_at": self.copy_finished_at,
+            "verify_finished_at": self.verify_finished_at,
+            "copy_durations": self.copy_durations,
+            "verify_durations": self.verify_durations,
         }
 
     @classmethod
@@ -62,4 +71,8 @@ class Item:
             checksum_source=d.get("checksum_source", ""),
             checksums_dest=d.get("checksums_dest", []),
             error=d.get("error", ""),
+            copy_finished_at=d.get("copy_finished_at", []),
+            verify_finished_at=d.get("verify_finished_at", []),
+            copy_durations=d.get("copy_durations", []),
+            verify_durations=d.get("verify_durations", []),
         )
