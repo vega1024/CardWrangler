@@ -1,6 +1,6 @@
 """components 包导出。"""
 from __future__ import annotations
 
-from .card_row import make_card_row
+from .card_row import CardRow
 
-__all__ = ["make_card_row"]
+__all__ = ["CardRow"]
