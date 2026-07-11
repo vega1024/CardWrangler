@@ -144,20 +144,27 @@ class AddCardDialog(QDialog):
             self._add_target_row()
         root.addWidget(dst_box)
 
-        # 校验方式
-        v_box = QGroupBox("校验方式")
-        vl = QVBoxLayout(v_box)
+        # 校验方式（横向单选条，对齐参考截图）
+        algo_row = QHBoxLayout()
+        algo_row.setSpacing(12)
+        algo_row.addWidget(QLabel("校验方式"))
         self._verify_group = QButtonGroup(self)
-        for label, algo in [("MD5", "md5"), ("SHA1", "sha1"), ("SHA256", "sha256"), ("不校验", "")]:
+        for label, algo in [
+            ("MD5（较慢，推荐）", "md5"),
+            ("SHA1（较慢）", "sha1"),
+            ("SHA256（较慢）", "sha256"),
+            ("不校验，只比较尺寸（不推荐）", ""),
+        ]:
             rb = QRadioButton(label)
             self._verify_group.addButton(rb)
             self._algo_buttons.append((rb, algo))
-            vl.addWidget(rb)
+            algo_row.addWidget(rb)
             if algo == default_algorithm or (
                 algo == "" and default_algorithm not in ("md5", "sha1", "sha256")
             ):
                 rb.setChecked(True)
-        root.addWidget(v_box)
+        algo_row.addStretch(1)
+        root.addLayout(algo_row)
 
         # 底部按钮
         btn_row = QHBoxLayout()
