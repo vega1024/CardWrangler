@@ -171,10 +171,23 @@ class MainWindow(QMainWindow):
 
         self.vm.mark_busy(True)
         self.worker = OffloadWorker(job)
-        self.worker.progress.connect(lambda item, pct: self.vm.report_progress(item, pct))
-        self.worker.finished.connect(self._on_offload_finished)
-        self.worker.errored.connect(self._on_offload_error)
+        # 关键：worker 在子线程 emit 信号。必须连到 QObject 的绑定 slot 并显式用
+        # QueuedConnection，否则连到普通 lambda 时会在子线程直接执行 slot，
+        # 导致子线程操作 GUI → "QPaintDevice: Cannot destroy paint device..." + segfault。
+        self.worker.progress.connect(
+            self._on_worker_progress, Qt.ConnectionType.QueuedConnection
+        )
+        self.worker.finished.connect(
+            self._on_offload_finished, Qt.ConnectionType.QueuedConnection
+        )
+        self.worker.errored.connect(
+            self._on_offload_error, Qt.ConnectionType.QueuedConnection
+        )
         self.worker.start()
+
+    def _on_worker_progress(self, item, percent: int) -> None:
+        """在主线程接收子线程的进度信号，再转给 ViewModel（避免跨线程操作 GUI）。"""
+        self.vm.report_progress(item, percent)
 
     def _on_offload_finished(self, job: CardJob) -> None:
         self.vm.mark_busy(False)

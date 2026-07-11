@@ -9,7 +9,7 @@ from PySide6.QtCore import QThread, Signal
 from ..models.card_job import CardJob
 from ..models.item import Item
 from ..models.compare_result import CompareEntry
-from ..services.offload_service import offload_item
+from ..services.offload_service import offload_job
 from ..services.compare_service import compare_paths
 
 
@@ -24,13 +24,10 @@ class OffloadWorker(QThread):
 
     def run(self) -> None:
         try:
-            for item in self.job.items:
-                offload_item(
-                    item,
-                    self.job.verify_after_copy,
-                    self.job.checksum_algorithm,
-                    on_progress=self._on_progress,
-                )
+            # 用 offload_job（而非手动循环 offload_item）：它在拷贝/校验后会把每个
+            # Item 的「每目标」耗时与完成时间聚合到任务级字段，并设置 job.status /
+            # finished_at / duration_seconds，供详情区目标盘表格与头部直接展示。
+            offload_job(self.job, on_progress=self._on_progress)
             self.finished.emit(self.job)
         except Exception as exc:  # noqa: BLE001 - 顶层兜底，避免线程静默崩溃
             self.errored.emit(str(exc))

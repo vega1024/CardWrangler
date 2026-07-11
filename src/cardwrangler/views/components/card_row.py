@@ -25,15 +25,17 @@ def _make_x_icon(color: str = _RED) -> QIcon:
     pm = QPixmap(size, size)
     pm.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pm)
-    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    pen = QPen(QColor(color))
-    pen.setWidth(2)
-    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-    painter.setPen(pen)
-    m = 4
-    painter.drawLine(m, m, size - m, size - m)
-    painter.drawLine(size - m, m, m, size - m)
-    painter.end()
+    try:
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        pen = QPen(QColor(color))
+        pen.setWidth(2)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        painter.setPen(pen)
+        m = 4
+        painter.drawLine(m, m, size - m, size - m)
+        painter.drawLine(size - m, m, m, size - m)
+    finally:
+        painter.end()
     return QIcon(pm)
 
 
