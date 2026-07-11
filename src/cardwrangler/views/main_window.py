@@ -139,7 +139,7 @@ class MainWindow(QMainWindow):
             default_count = int(self.settings.value("default_target_count", 1))
         except (TypeError, ValueError):
             default_count = 1
-        default_algo = str(self.settings.value("checksum_algorithm", "sha256"))
+        default_algo = str(self.settings.value("checksum_algorithm", "md5"))
         dlg = AddCardDialog(
             self,
             default_dest=default_dest,
@@ -154,7 +154,7 @@ class MainWindow(QMainWindow):
         label = dlg.label or source.rstrip("/").split("/")[-1] or "未命名卡"
         job = CardJob.new(label, source, targets)
         job.verify_after_copy = dlg.verify
-        job.checksum_algorithm = dlg.algorithm or "sha256"
+        job.checksum_algorithm = dlg.algorithm or "md5"
         self.vm.add_job(job)
         self.vm.select_job(job)
         # 贴合参考工具「开始拷贝」语义：添加后立即转卡（若当前空闲）
@@ -193,7 +193,7 @@ class MainWindow(QMainWindow):
         dlg.set_values(
             {
                 "verify_after_copy": bool(self.settings.value("verify_after_copy", True, type=bool)),
-                "checksum_algorithm": str(self.settings.value("checksum_algorithm", "sha256")),
+                "checksum_algorithm": str(self.settings.value("checksum_algorithm", "md5")),
                 "default_dest": str(self.settings.value("default_dest", "")),
                 "default_target_count": int(self.settings.value("default_target_count", 1)),
             }

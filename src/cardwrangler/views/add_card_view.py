@@ -58,7 +58,7 @@ class AddCardDialog(QDialog):
         parent=None,
         default_dest: str = "",
         default_target_count: int = 1,
-        default_algorithm: str = "sha256",
+        default_algorithm: str = "md5",
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle("添加源盘")

@@ -81,6 +81,7 @@ def main() -> None:
     assert "不校验，只比较尺寸（不推荐）" in texts, f"FAIL: 不校验标签未对齐截图，实际 {texts}"
     checked = [r.text() for r in radios if r.isChecked()]
     assert len(checked) == 1, f"FAIL: 应只有一个单选被选中，实际 {checked}"
+    assert checked[0] == "MD5（较慢，推荐）", f"FAIL: 默认应选中 MD5，实际 {checked[0]}"
 
     print("PASS: 工具栏与侧边栏「添加源盘」入口均正常触发对话框")
     print(f"  toolbar calls = {_state['toolbar']}, sidebar calls = {_state['sidebar']}")

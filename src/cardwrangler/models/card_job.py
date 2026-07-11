@@ -20,7 +20,7 @@ class CardJob:
     items: List[Item] = field(default_factory=list)
     created_at: str = field(default_factory=lambda: datetime.now().isoformat(timespec="seconds"))
     verify_after_copy: bool = True
-    checksum_algorithm: str = "sha256"
+    checksum_algorithm: str = "md5"
     status: ItemStatus = ItemStatus.PENDING
     # 任务级时间
     finished_at: str = ""           # 任务完成时间（ISO 秒）
@@ -80,7 +80,7 @@ class CardJob:
             items=d["items"],
             created_at=d.get("created_at", ""),
             verify_after_copy=d.get("verify_after_copy", True),
-            checksum_algorithm=d.get("checksum_algorithm", "sha256"),
+            checksum_algorithm=d.get("checksum_algorithm", "md5"),
             status=d["status"],
             finished_at=d.get("finished_at", ""),
             duration_seconds=d.get("duration_seconds", 0.0),
