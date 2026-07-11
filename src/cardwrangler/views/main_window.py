@@ -129,20 +129,27 @@ class MainWindow(QMainWindow):
             default_count = int(self.settings.value("default_target_count", 1))
         except (TypeError, ValueError):
             default_count = 1
+        default_algo = str(self.settings.value("checksum_algorithm", "sha256"))
         dlg = AddCardDialog(
-            self, default_dest=default_dest, default_target_count=default_count
+            self,
+            default_dest=default_dest,
+            default_target_count=default_count,
+            default_algorithm=default_algo,
         )
         if dlg.exec() != QDialog.Accepted:
             return
 
         source = dlg.source
         targets = dlg.targets
-        label = source.rstrip("/").split("/")[-1] or "未命名卡"
+        label = dlg.label or source.rstrip("/").split("/")[-1] or "未命名卡"
         job = CardJob.new(label, source, targets)
-        job.verify_after_copy = bool(self.settings.value("verify_after_copy", True, type=bool))
-        job.checksum_algorithm = str(self.settings.value("checksum_algorithm", "sha256"))
+        job.verify_after_copy = dlg.verify
+        job.checksum_algorithm = dlg.algorithm or "sha256"
         self.vm.add_job(job)
         self.vm.select_job(job)
+        # 贴合参考工具「开始拷贝」语义：添加后立即转卡（若当前空闲）
+        if not self.vm.is_busy:
+            self._start_offload()
 
     def _start_offload(self) -> None:
         job = self.vm.selected_job

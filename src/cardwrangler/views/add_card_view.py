@@ -1,158 +1,323 @@
-"""添加存储卡对话框：一个源（存储卡）+ 多个目标（转卡目录）。
+"""添加源盘向导：选源盘 -> 预览（后缀统计）-> 选目标盘 -> 选校验方式 -> 开始拷贝。
 
-目标框数量由设置里的「默认目标数量」决定；用户可点「+ 添加目标」增加，
-点每行末尾的「✕」删除（至少保留一个）。允许部分目标留空，但必须至少有一个。
+仅用于「添加源盘」按钮。不区分主/关联素材，统计只按文件后缀聚合。
 """
 from __future__ import annotations
 
+import shutil
+from pathlib import Path
+from typing import List, Tuple
+
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QButtonGroup,
+    QCheckBox,
     QDialog,
-    QDialogButtonBox,
     QFileDialog,
-    QFormLayout,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
     QMessageBox,
     QPushButton,
+    QRadioButton,
     QVBoxLayout,
     QWidget,
 )
 
 
-class AddCardDialog(QDialog):
-    """让用户一次性看清并填好「源」与若干「目标」，确认前可任意增删修改。"""
+def _fmt_bytes(b: int) -> str:
+    if not b:
+        return "0B"
+    v = float(b)
+    for u in ("B", "KB", "MB", "GB", "TB"):
+        if v < 1024:
+            return f"{v:.2f}{u}" if u != "B" else f"{int(v)}{u}"
+        v /= 1024
+    return f"{v:.2f}PB"
 
+
+def _disk_info(path: str):
+    p = Path(path)
+    parts = p.parts
+    vol = parts[1] if len(parts) >= 2 and parts[1] else (parts[0] if parts else str(path))
+    cap = free = ""
+    try:
+        du = shutil.disk_usage(p)
+        cap = _fmt_bytes(du.total)
+        free = _fmt_bytes(du.free)
+    except (OSError, PermissionError):
+        pass
+    return vol, cap, free
+
+
+class AddCardDialog(QDialog):
     def __init__(
         self,
         parent=None,
         default_dest: str = "",
         default_target_count: int = 1,
+        default_algorithm: str = "sha256",
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("添加存储卡")
-        self.resize(640, 320)
+        self.setWindowTitle("添加源盘")
+        self.resize(680, 600)
         self.source = ""
-        self.targets: list[str] = []
-        self._targets: list[tuple[QWidget, QLineEdit]] = []
-        self._build_ui(default_dest, default_target_count)
+        self.label = ""
+        self.targets: List[str] = []
+        self.algorithm = default_algorithm
+        self.verify = True
+        self._default_dest = default_dest
+        self._default_algo = default_algorithm
+        self._total_bytes = 0
+        self._target_rows: List[Tuple[QWidget, QLineEdit, QLabel, QCheckBox]] = []
+        self._algo_buttons: List[Tuple[QRadioButton, str]] = []
+        self._build_ui(default_dest, default_target_count, default_algorithm)
 
-    def _build_ui(self, default_dest: str, default_target_count: int) -> None:
-        layout = QVBoxLayout(self)
+    # ---------- 构建 ----------
+    def _build_ui(self, default_dest, default_target_count, default_algorithm) -> None:
+        root = QVBoxLayout(self)
+        root.setSpacing(10)
 
-        # 源（单个）
-        form = QFormLayout()
-        self.source_edit = QLineEdit()
-        self.source_edit.setPlaceholderText("选择存储卡所在目录（源）")
-        form.addRow("源（存储卡）", self._with_browse(self.source_edit, "选择存储卡目录"))
-        layout.addLayout(form)
+        # 源盘区
+        src_box = QGroupBox("源盘")
+        sl = QVBoxLayout(src_box)
+        top = QHBoxLayout()
+        top.addWidget(QLabel("选择存储卡（源）目录："))
+        top.addStretch(1)
+        pick = QPushButton("选择源盘…")
+        pick.clicked.connect(self._pick_source)
+        top.addWidget(pick)
+        sl.addLayout(top)
 
-        # 目标（多个）
-        layout.addWidget(QLabel("目标目录（可添加多个；至少填一个，其余可留空）"))
-        self.targets_container = QWidget()
-        self.targets_layout = QVBoxLayout(self.targets_container)
-        self.targets_layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.targets_container)
+        self.src_hint = QLabel("尚未选择源盘。")
+        self.src_hint.setStyleSheet("color:#9ca3af;")
+        sl.addWidget(self.src_hint)
 
-        self.add_target_btn = QPushButton("+ 添加目标")
-        self.add_target_btn.clicked.connect(self._add_target_row)
-        layout.addWidget(self.add_target_btn)
+        self.src_info = QWidget()
+        self.src_info.setVisible(False)
+        sil = QVBoxLayout(self.src_info)
+        sil.setContentsMargins(0, 0, 0, 0)
+        name_row = QHBoxLayout()
+        name_row.addWidget(QLabel("名称："))
+        self.src_name = QLineEdit()
+        name_row.addWidget(self.src_name, 1)
+        sil.addLayout(name_row)
+        self.src_stat = QLabel()
+        self.src_stat.setStyleSheet("color:#374151; font-weight:600;")
+        sil.addWidget(self.src_stat)
+        self.src_ext = QLabel()
+        self.src_ext.setStyleSheet("color:#6b7280; font-size:12px;")
+        self.src_ext.setWordWrap(True)
+        sil.addWidget(self.src_ext)
+        view_btn = QPushButton("查看文件")
+        view_btn.setFixedWidth(90)
+        view_btn.clicked.connect(self._toggle_files)
+        sil.addWidget(view_btn)
+        self.files_list = QListWidget()
+        self.files_list.setMaximumHeight(140)
+        self.files_list.setVisible(False)
+        sil.addWidget(self.files_list)
+        sl.addWidget(self.src_info)
+        root.addWidget(src_box)
 
-        # 预填：默认目标目录填到第一个框；其余按默认数量补空框
-        n = max(1, default_target_count)
-        for i in range(n):
-            self._add_target_row(prefill=default_dest if (i == 0 and default_dest) else "")
-        if not self._targets:
+        arrow = QLabel("↓")
+        arrow.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        arrow.setStyleSheet("color:#9ca3af; font-size:18px;")
+        root.addWidget(arrow)
+
+        # 目标盘区
+        dst_box = QGroupBox("目标盘")
+        dl = QVBoxLayout(dst_box)
+        self.dst_container = QWidget()
+        self.dst_layout = QVBoxLayout(self.dst_container)
+        self.dst_layout.setContentsMargins(0, 0, 0, 0)
+        self.dst_layout.setSpacing(6)
+        dl.addWidget(self.dst_container)
+        add_dst = QPushButton("+ 添加目标…")
+        add_dst.clicked.connect(lambda: self._add_target_row())
+        dl.addWidget(add_dst)
+        for _ in range(max(1, default_target_count)):
             self._add_target_row()
+        if not self._target_rows:
+            self._add_target_row()
+        root.addWidget(dst_box)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Cancel | QDialogButtonBox.Ok)
-        buttons.button(QDialogButtonBox.Ok).setText("添加")
-        buttons.accepted.connect(self._on_accept)
-        buttons.rejected.connect(self.reject)
-        layout.addWidget(buttons)
+        # 校验方式
+        v_box = QGroupBox("校验方式")
+        vl = QVBoxLayout(v_box)
+        self._verify_group = QButtonGroup(self)
+        for label, algo in [("MD5", "md5"), ("SHA1", "sha1"), ("SHA256", "sha256"), ("不校验", "")]:
+            rb = QRadioButton(label)
+            self._verify_group.addButton(rb)
+            self._algo_buttons.append((rb, algo))
+            vl.addWidget(rb)
+            if algo == default_algorithm or (
+                algo == "" and default_algorithm not in ("md5", "sha1", "sha256")
+            ):
+                rb.setChecked(True)
+        root.addWidget(v_box)
 
-    # ---------- 目标行管理 ----------
+        # 底部按钮
+        btn_row = QHBoxLayout()
+        btn_row.addStretch(1)
+        cancel = QPushButton("取消")
+        cancel.clicked.connect(self.reject)
+        start = QPushButton("开始拷贝")
+        start.setStyleSheet(
+            "QPushButton{background:#16a34a; color:#fff; font-weight:600; "
+            "padding:6px 16px; border-radius:6px;} "
+            "QPushButton:hover{background:#15803d;}"
+        )
+        start.clicked.connect(self._on_accept)
+        btn_row.addWidget(cancel)
+        btn_row.addWidget(start)
+        root.addLayout(btn_row)
+
+    # ---------- 源盘 ----------
+    def _pick_source(self) -> None:
+        d = QFileDialog.getExistingDirectory(self, "选择源盘目录")
+        if d:
+            self._on_source_chosen(d)
+
+    def _on_source_chosen(self, path: str) -> None:
+        p = Path(path)
+        total = 0
+        total_bytes = 0
+        ext: dict[str, Tuple[int, int]] = {}
+        files: List[str] = []
+        if p.exists():
+            for f in sorted(p.rglob("*")):
+                if f.is_file():
+                    total += 1
+                    sz = f.stat().st_size
+                    total_bytes += sz
+                    e = f.suffix.lower() or "(无后缀)"
+                    c, b = ext.get(e, (0, 0))
+                    ext[e] = (c + 1, b + sz)
+                    if len(files) < 500:
+                        files.append(str(f.relative_to(p)))
+        self._total_bytes = total_bytes
+        self.source = str(p)
+        self.label = p.name or str(p)
+        self.src_hint.setVisible(False)
+        self.src_info.setVisible(True)
+        self.src_name.setText(self.label)
+        self.src_stat.setText(f"{total} 个文件 · {_fmt_bytes(total_bytes)}")
+        self.src_ext.setText(
+            "后缀统计：" + (", ".join(f"{e} ×{c}" for e, (c, b) in sorted(ext.items())) or "—")
+        )
+        self.files_list.clear()
+        self.files_list.addItems(files)
+
+        name = p.name or "card"
+        prefill = f"{self._default_dest}/{name}" if self._default_dest else ""
+        if self._target_rows and not self._target_rows[0][1].text().strip():
+            self._target_rows[0][1].setText(prefill)
+        for _w, edit, disk, _c in self._target_rows:
+            self._refresh_disk(disk, edit.text())
+
+    def _toggle_files(self) -> None:
+        self.files_list.setVisible(not self.files_list.isVisible())
+
+    # ---------- 目标盘 ----------
     def _add_target_row(self, prefill: str = "") -> None:
         row = QWidget()
-        h = QHBoxLayout(row)
+        v = QVBoxLayout(row)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(4)
+        h = QHBoxLayout()
         h.setContentsMargins(0, 0, 0, 0)
-        line = QLineEdit()
-        line.setPlaceholderText("选择转卡目标目录")
+        edit = QLineEdit()
+        edit.setPlaceholderText("选择转卡目标目录")
         if prefill:
-            line.setText(prefill)
+            edit.setText(prefill)
         browse = QPushButton("浏览…")
-        browse.clicked.connect(lambda: self._browse(line, "选择目标目录"))
-        delete = QPushButton("✕")
-        delete.setFixedWidth(30)
-        delete.clicked.connect(lambda: self._remove_target_row(row))
-        h.addWidget(line)
+        browse.clicked.connect(lambda: self._browse(edit))
+        chk = QCheckBox("启用")
+        chk.setChecked(True)
+        del_btn = QPushButton("✕")
+        del_btn.setFixedWidth(28)
+        del_btn.setStyleSheet(
+            "QPushButton{border:none; color:#dc2626; background:transparent;} "
+            "QPushButton:hover{color:#b91c1c;}"
+        )
+        del_btn.clicked.connect(lambda: self._remove_target_row(row))
+        h.addWidget(edit, 1)
         h.addWidget(browse)
-        h.addWidget(delete)
-        self.targets_layout.addWidget(row)
-        self._targets.append((row, line))
-        self._update_delete_state()
+        h.addWidget(chk)
+        h.addWidget(del_btn)
+        v.addLayout(h)
+        disk = QLabel()
+        disk.setStyleSheet("color:#6b7280; font-size:12px;")
+        v.addWidget(disk)
+        edit.textChanged.connect(lambda _=0: self._refresh_disk(disk, edit.text()))
+        self.dst_layout.addWidget(row)
+        self._target_rows.append((row, edit, disk, chk))
+        self._refresh_disk(disk, edit.text())
+
+    def _browse(self, edit: QLineEdit) -> None:
+        d = QFileDialog.getExistingDirectory(self, "选择目标目录")
+        if d:
+            edit.setText(d)
+
+    def _refresh_disk(self, disk_label: QLabel, path: str) -> None:
+        if not path:
+            disk_label.setText("")
+            return
+        vol, cap, free = _disk_info(path)
+        parts = [vol]
+        if cap:
+            parts.append(f"共 {cap}")
+        if free:
+            remain = ""
+            try:
+                if self._total_bytes:
+                    rb_free = shutil.disk_usage(Path(path)).free - self._total_bytes
+                    remain = f" · 拷贝后剩余 {_fmt_bytes(max(rb_free, 0))}"
+            except (OSError, PermissionError):
+                pass
+            parts.append(f"可用 {free}{remain}")
+        disk_label.setText(" · ".join(parts))
 
     def _remove_target_row(self, row: QWidget) -> None:
-        for i, (w, _line) in enumerate(self._targets):
+        for i, (w, _e, _d, _c) in enumerate(self._target_rows):
             if w is row:
-                self.targets_layout.removeWidget(w)
+                self.dst_layout.removeWidget(w)
                 w.deleteLater()
-                self._targets.pop(i)
+                self._target_rows.pop(i)
                 break
-        self._update_delete_state()
 
-    def _update_delete_state(self) -> None:
-        enabled = len(self._targets) > 1
-        for w, _line in self._targets:
-            h = w.layout()
-            if h is not None and h.count() >= 3:
-                del_btn = h.itemAt(2).widget()
-                if del_btn is not None:
-                    del_btn.setEnabled(enabled)
-
-    # ---------- 通用 ----------
-    def _with_browse(self, line: QLineEdit, caption: str) -> QWidget:
-        row = QHBoxLayout()
-        row.addWidget(line)
-        btn = QPushButton("浏览…")
-        btn.clicked.connect(lambda: self._browse(line, caption))
-        row.addWidget(btn)
-        box = QWidget()
-        box.setLayout(row)
-        return box
-
-    def _browse(self, line: QLineEdit, caption: str) -> None:
-        d = QFileDialog.getExistingDirectory(self, caption)
-        if d:
-            line.setText(d)
-
+    # ---------- 确认 ----------
     def _on_accept(self) -> None:
-        src = self.source_edit.text().strip()
-        if not src:
-            QMessageBox.warning(self, "提示", "请选择源目录。")
+        if not self.source:
+            QMessageBox.warning(self, "提示", "请先选择源盘目录。")
             return
-
-        targets = []
-        for _w, line in self._targets:
-            t = line.text().strip()
-            if t:
+        targets: List[str] = []
+        for _w, edit, _d, chk in self._target_rows:
+            t = edit.text().strip()
+            if t and chk.isChecked():
                 targets.append(t)
-        # 去重（保持顺序）
         seen = set()
-        dedup = []
-        for t in targets:
-            if t not in seen:
-                seen.add(t)
-                dedup.append(t)
+        dedup = [t for t in targets if not (t in seen or seen.add(t))]
         targets = dedup
-
         if not targets:
-            QMessageBox.warning(self, "提示", "请至少填写一个目标目录。")
+            QMessageBox.warning(self, "提示", "请至少启用并填写一个目标目录。")
             return
-        if src in targets:
-            QMessageBox.warning(self, "提示", "源和目标不能是同一个目录。")
+        if self.source in targets:
+            QMessageBox.warning(self, "提示", "源目录不能当作目标目录。")
             return
 
-        self.source = src
         self.targets = targets
+        self.label = self.src_name.text().strip() or self.label
+        for btn, algo in self._algo_buttons:
+            if btn.isChecked():
+                if algo == "":
+                    self.verify = False
+                    self.algorithm = self._default_algo
+                else:
+                    self.verify = True
+                    self.algorithm = algo
+                break
         self.accept()
