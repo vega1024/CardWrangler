@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import shutil
+import sys
 from pathlib import Path
 from typing import List, Optional
 
@@ -94,18 +95,67 @@ def _fmt_bytes(b: int) -> str:
     return f"{value:.2f}PB"
 
 
-def _disk_info(path: str):
-    """返回 (卷名, 容量文本)。容量取不到时返回空字符串。"""
+def _disk_info(path: str) -> tuple[str, str]:
+    """返回 (显示名, 容量文本)。
+
+    显示名优先尝试真实卷名（macOS 用 diskutil），拿不到时按平台显示
+    盘符/系统盘/目录名，避免把 `/Users/...` 的第二级目录「Users」当作卷名。
+    """
     p = Path(path)
-    parts = p.parts
-    vol = parts[1] if len(parts) >= 2 and parts[1] else (parts[0] if parts else str(path))
     cap = ""
     try:
         total = shutil.disk_usage(p).total
         cap = _fmt_bytes(total)
     except (OSError, PermissionError):
         cap = ""
-    return vol, cap
+    return _volume_name(p), cap
+
+
+def _volume_name(p: Path) -> str:
+    """按平台返回一个用户友好的卷名/盘名。"""
+    try:
+        if sys.platform == "win32":
+            parts = p.parts
+            if parts and len(parts[0]) >= 2 and parts[0][1] == ":":
+                return parts[0]
+            return p.name or str(p)
+
+        # macOS / Linux: 优先尝试 diskutil 拿真实卷名
+        if sys.platform == "darwin":
+            import subprocess
+            try:
+                out = subprocess.run(
+                    ["diskutil", "info", "-plist", str(p)],
+                    capture_output=True, text=True, check=True, timeout=1,
+                ).stdout
+                # 简单解析 plist 的 VolumeName 行
+                for line in out.splitlines():
+                    if "VolumeName" in line and "<string>" in line:
+                        name = line.split("<string>", 1)[1].split("</string>", 1)[0].strip()
+                        if name:
+                            return name
+            except Exception:
+                pass
+
+            # diskutil 失败时按路径模式兜底
+            abs_path = str(p.resolve())
+            if abs_path.startswith(("/Users", "/System", "/Applications", "/Library")):
+                return "系统盘"
+            if abs_path.startswith("/Volumes/"):
+                parts = abs_path.split("/")
+                if len(parts) >= 3:
+                    return parts[2]
+            if abs_path == "/":
+                return "系统盘"
+            return p.name or str(p)
+
+        # Linux 默认
+        abs_path = str(p.resolve())
+        if abs_path == "/":
+            return "系统盘"
+        return p.name or str(p)
+    except Exception:  # noqa: BLE001
+        return p.name or str(p)
 
 
 def _shorten(text: str, n: int = 48) -> str:
@@ -179,11 +229,10 @@ class _JobCard(QWidget):
         self.time_label.setAlignment(Qt.AlignmentFlag.AlignRight)
         icons = QHBoxLayout()
         icons.setSpacing(6)
-        icons.addWidget(_colored_box("#b4b2a9", 20, 4))
-        more = QLabel("⋯")
-        more.setStyleSheet("color:#9ca3af; font-size:16px;")
-        icons.addWidget(more)
         icons.addStretch(1)
+        target_count = QLabel(f"{len(self.job.dest_roots)} 个目标")
+        target_count.setStyleSheet("color:#9ca3af; font-size:12px;")
+        icons.addWidget(target_count)
         right.addWidget(self.time_label)
         right.addLayout(icons)
         h.addLayout(right)
@@ -216,7 +265,7 @@ class _JobCard(QWidget):
         )
         table.setEditTriggers(table.EditTrigger.NoEditTriggers)
         table.verticalHeader().setVisible(False)
-        table.setColumnWidth(0, 150)
+        table.setColumnWidth(0, 180)
         table.setColumnWidth(1, 100)
         table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         table.setShowGrid(False)
@@ -251,7 +300,7 @@ class _JobCard(QWidget):
         vcol.setContentsMargins(0, 0, 0, 0)
         vcol.setSpacing(1)
         vcol.addWidget(_label(vol, "font-weight:600; font-size:13px; color:#111827;"))
-        vcol.addWidget(_label(cap, "color:#9ca3af; font-size:11px;"))
+        vcol.addWidget(_label(cap, "color:#6b7280; font-size:12px; padding-top:1px;"))
         il.addLayout(vcol)
         il.addStretch(1)
         table.setCellWidget(di, 0, info)
