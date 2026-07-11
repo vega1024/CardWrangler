@@ -1,8 +1,8 @@
-"""侧边栏：任务列表 + 添加按钮。"""
+"""侧边栏：任务列表。"""
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, QSize, Signal
-from PySide6.QtWidgets import QPushButton, QListWidget, QListWidgetItem, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QListWidget, QListWidgetItem, QVBoxLayout, QWidget
 
 from ..models.card_job import CardJob
 from .components.card_row import CardRow
@@ -10,7 +10,6 @@ from .components.card_row import CardRow
 
 class SidebarView(QWidget):
     job_selected = Signal(str)   # 选中的任务 id
-    add_requested = Signal()     # 点击「添加存储卡」
     delete_requested = Signal(str)  # 请求删除某任务 id
 
     def __init__(self) -> None:
@@ -23,12 +22,7 @@ class SidebarView(QWidget):
         self.list.setSpacing(4)
         self.list.itemClicked.connect(lambda it: self.job_selected.emit(it.data(Qt.UserRole)))
 
-        add_btn = QPushButton("+ 添加存储卡")
-        add_btn.setMinimumHeight(34)
-        add_btn.clicked.connect(self.add_requested.emit)
-
         layout.addWidget(self.list)
-        layout.addWidget(add_btn)
 
     def set_jobs(self, jobs: list[CardJob]) -> None:
         self.list.clear()

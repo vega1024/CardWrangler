@@ -82,9 +82,7 @@ class MainWindow(QMainWindow):
         self.vm.jobs_changed.connect(self._on_jobs_changed)
         self.vm.job_selected.connect(self._on_job_selected)
         self.vm.progress.connect(lambda item, pct: self.detail.update_progress(item, pct))
-        self.vm.status_message.connect(self.statusBar().showMessage)
 
-        self.sidebar.add_requested.connect(self._add_card)
         self.sidebar.job_selected.connect(self._on_sidebar_selected)
         self.sidebar.delete_requested.connect(self._remove_card)
         self.detail.report_requested.connect(self._export_report)
@@ -193,9 +191,6 @@ class MainWindow(QMainWindow):
         self.vm.mark_busy(False)
         self.vm.finalize_job(job)
         self.detail.show_job(job, self.vm.jobs)
-        self.statusBar().showMessage(
-            f"完成：{job.verified_count}/{len(job.items)} 个文件校验通过"
-        )
 
     def _on_offload_error(self, message: str) -> None:
         self.vm.mark_busy(False)
@@ -229,7 +224,6 @@ class MainWindow(QMainWindow):
         try:
             with open(path, "w", encoding="utf-8-sig") as f:
                 f.write(build_report_csv(self.vm.jobs))
-            self.statusBar().showMessage(f"报告已导出：{path}")
         except OSError as exc:
             QMessageBox.critical(self, "导出失败", str(exc))
 
